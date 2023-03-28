@@ -79,8 +79,8 @@ class CTrialSearch(object):
                 ["BCT01258803", "emilyalsentzer/Bio_ClinicalBERT", 5],
                 ["BCT01254474", "microsoft/biogpt", 5],
             ],
-            title="Similar trial search",
-            description="Enter an NCT_ID to extract it from the list.",
+            title="CTrials Similarity Search",
+            description="Enter an NCT_ID to extract its similar trials from the list.",
         )
 
         interface.launch()

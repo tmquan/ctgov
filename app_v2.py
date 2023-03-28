@@ -115,8 +115,8 @@ class PromptSearch(object):
                 ["hypertension", "emilyalsentzer/Bio_ClinicalBERT", 5],
                 ["hypertension", "microsoft/biogpt", 5],
             ],
-            title="Similar trial search",
-            description="Enter an NCT_ID to extract it from the list.",
+            title="Prompt Text Search",
+            description="Enter a prompt",
         )
 
         interface.launch()
