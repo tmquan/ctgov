@@ -2,7 +2,7 @@ import gradio as gr
 import numpy as np
 from datasets import load_from_disk
 
-class TrialSearch(object):
+class CTrialSearch(object):
     def __init__(
         self, 
         filename="ctgov_437713_20230321",
@@ -87,7 +87,7 @@ class TrialSearch(object):
 
 
 def main():
-    trial_search = TrialSearch()
+    trial_search = CTrialSearch()
     trial_search.launch_interface()
 
 
