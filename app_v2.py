@@ -98,7 +98,7 @@ class PromptSearch(object):
         return json_dict
       
 
-    def launch_interface(self):
+    def launch_interface(self, *args, **kwargs):
         interface = gr.Interface(
             fn=lambda *args, **kwargs: self.search_func(*args, **kwargs),
             inputs=[
@@ -119,7 +119,7 @@ class PromptSearch(object):
             description="Enter a prompt",
         )
 
-        interface.launch()
+        interface.launch(*args, **kwargs)
 
 
 def main():

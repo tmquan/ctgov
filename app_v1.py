@@ -2,7 +2,7 @@ import gradio as gr
 import numpy as np
 from datasets import load_from_disk
 
-class CTrialSearch(object):
+class TrialsSearch(object):
     def __init__(
         self, 
         filename="ctgov_437713_20230321",
@@ -45,7 +45,7 @@ class CTrialSearch(object):
                 "topk"          : k,
                 "topk_similar"  : topk_similar,
             }
-            return elem, target_value, json_dict
+            return json_dict
         else:
             json_dict = {
                 "source_index"  : elem,
@@ -57,9 +57,9 @@ class CTrialSearch(object):
                 "topk"          : k,
                 "topk_similar"  : None,
             }
-            return elem, "Not Found", json_dict
+            return json_dict
 
-    def launch_interface(self):
+    def launch_interface(self, *args, **kwargs):
         interface = gr.Interface(
             fn=lambda *args, **kwargs: self.search_func(*args, **kwargs),
             inputs=[
@@ -69,8 +69,6 @@ class CTrialSearch(object):
                 gr.Slider(1, 20, value=5, label=f"Number of similar trials", step=1),
             ],
             outputs=[
-                gr.Textbox(label=f"Source NCT_ID"),
-                gr.Textbox(label=f"Source content at {self.target_col}"),
                 gr.Json(label=f"Similar trials if found")
             ],
             examples=[
@@ -83,11 +81,11 @@ class CTrialSearch(object):
             description="Enter an NCT_ID to extract its similar trials from the list.",
         )
 
-        interface.launch()
+        interface.launch(*args, **kwargs)
 
 
 def main():
-    trial_search = CTrialSearch()
+    trial_search = TrialsSearch()
     trial_search.launch_interface()
 
 
