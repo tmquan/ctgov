@@ -6,9 +6,10 @@ from PIL import Image
 from datasets import load_from_disk
 import lightning as L
 from lightning.app.components.serve import ServeGradio
+from lightning.app.utilities.state import AppState
 
-from app_v1 import TrialsSearch
-from app_v2 import PromptSearch
+from TrialsSearchApp import TrialsSearch
+from PromptSearchApp import PromptSearch
 
 class TrialsSearchServeGradio(ServeGradio):
     options = [
@@ -50,7 +51,7 @@ class TrialsSearchServeGradio(ServeGradio):
     def run(self, *args, **kwargs):
         if self._model is None:
             self._model = self.build_model()
-
+        print(self.host, self.port)
         # Partially call the prediction
         fn = partial(self.predict, *args, **kwargs)
         fn.__name__ = self.predict.__name__

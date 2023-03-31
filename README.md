@@ -11,10 +11,10 @@ lightning run app app.py
 
 Trials search app
 ```python
-python app_v1.py
+python TrialsSearchApp.py
 ```
 
 Prompt search app
 ```python
-python app_v2.py
+python PromptSearchApp.py
 ```
