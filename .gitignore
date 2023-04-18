@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-ctgov_437713_20230321/
+ctgov*
 cache/
 temp/
 # C extensions
