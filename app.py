@@ -1,144 +1,174 @@
-from functools import partial
+from huggingface_hub import snapshot_download
+from txtai.workflow import Workflow
+from txtai.workflow import Task
+from txtai.pipeline import Tabular
+from txtai.pipeline import Similarity
+from txtai.embeddings import Embeddings
+from pprint import pprint
+import json
+import pandas as pd
 import gradio as gr
-import requests
-import torch
-from PIL import Image
-from datasets import load_from_disk
-import lightning as L
-from lightning.app.components.serve import ServeGradio
-from lightning.app.utilities.state import AppState
+import numpy as np
+import geopy.distance
+from geopy.geocoders import Nominatim
+import os
+os.environ['TRANSFORMERS_CACHE'] = 'cache'
 
-from TrialsSearchApp import TrialsSearch
-from PromptSearchApp import PromptSearch
+try:
+    from tqdm.auto import tqdm
+except ImportError:
+    def tqdm(x): return x
 
-class TrialsSearchServeGradio(ServeGradio):
-    options = [
-        "emilyalsentzer/Bio_ClinicalBERT",
-        "microsoft/biogpt"
-    ]    
-    inputs=[
-        gr.Textbox(label=f"Source NCT_ID"),
-        gr.Dropdown(options, label=f"Pretrained model"),
-        gr.Slider(1, 20, value=5, label=f"Number of similar trials", step=1),
-    ]
-    outputs=[
-        gr.Json(label=f"Similar trials if found")
-    ]
-    examples=[
-        ["NCT01258803", "emilyalsentzer/Bio_ClinicalBERT", 5],
-        ["NCT01254474", "microsoft/biogpt", 5],
-        ["BCT01258803", "emilyalsentzer/Bio_ClinicalBERT", 5],
-        ["BCT01254474", "microsoft/biogpt", 5],
-    ]
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # self._model = None
-        self.ready = False
+class SemanticSearch(object):
+    def __init__(
+        self,
+        filename="ctgov_34983_20230417",
+        columns=[
+            "brief_title",
+            "official_title",
+            "brief_summaries",
+            "detailed_descriptions",
+            "criteria",
+        ],
+        ckptlist=[
+            "sentence-transformers/multi-qa-mpnet-base-dot-v1",
+        ],
+        rerun=True,
+    ):
+        self.filename = filename
+        self.columns = columns
+        self.ckptlist = ckptlist
 
-    def build_model(self):
-        model = TrialsSearch(
-            filename="ctgov_437713_20230321",
-            source_col="nct_id",
-            target_col="brief_title",
-        )
-        self.ready = True
-        return model
-    
-    def predict(self, elem, pretrained="emilyalsentzer/Bio_ClinicalBERT", k=10):
-        return self._model.search_func(elem, pretrained, k)
-    
-    def run(self, *args, **kwargs):
-        if self._model is None:
-            self._model = self.build_model()
-        print(self.host, self.port)
-        # Partially call the prediction
-        fn = partial(self.predict, *args, **kwargs)
-        fn.__name__ = self.predict.__name__
-        gr.Interface(
-            fn=fn,      
-            inputs=self.inputs,
-            outputs=self.outputs,
-            examples=self.examples
-        ).launch(
-            server_name=self.host,
-            server_port=self.port,
-            enable_queue=self.enable_queue,
-            share=False,
-        )
+        for ckptpath in self.ckptlist:
+            snapshot_download(repo_id=ckptpath,
+                              repo_type="model",
+                              cache_dir="cache")
+            self.embeddings = Embeddings({
+                "method": "transformers",
+                "path": ckptpath,
+                "content": True,
+                "object": True
+            })
+            indexfile = f'{filename}_{ckptpath.replace("/", "-")}.index'
+            if os.path.exists(indexfile) and rerun is False:
+                print("Indexed and Cached!")
+                self.embeddings.load(indexfile)
+            else:
+                print("Need to rerun or Indices and Caches dont exist, run them!")
 
-class PromptSearchServeGradio(ServeGradio):
-    options = [
-        "emilyalsentzer/Bio_ClinicalBERT",
-        "microsoft/biogpt"
-    ]    
-    inputs=[
-        gr.Textbox(label=f"Source prompt text"),
-        gr.Dropdown(options, label=f"Pretrained model"),
-        gr.Slider(1, 20, value=5, label=f"Number of similar trials", step=1),
-    ]
-    outputs=[
-        gr.Json(label=f"Similar trials if found")
-    ]
-    examples=[
-        ["diabetes", "emilyalsentzer/Bio_ClinicalBERT", 5],
-        ["diabetes", "microsoft/biogpt", 5],
-        ["hypertension", "emilyalsentzer/Bio_ClinicalBERT", 5],
-        ["hypertension", "microsoft/biogpt", 5],
-    ]
+                # Create tabular instance mapping input.csv fields
+                tabular = Tabular(idcolumn="nct_id",
+                                  textcolumns=columns, content=True)
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # self._model = None
-        self.ready = False
+                # Create workflow
+                workflow = Workflow([Task(tabular)])
 
-    def build_model(self):
-        model = PromptSearch(
-            filename="ctgov_437713_20230321",
-            source_col="nct_id",
-            target_col="brief_title",
-        )
-        self.ready = True
-        return model
-    
-    def predict(self, elem, pretrained="emilyalsentzer/Bio_ClinicalBERT", k=10):
-        return self._model.search_func(elem, pretrained, k)
-    
-    def run(self, *args, **kwargs):
-        if self._model is None:
-            self._model = self.build_model()
+                # Index subset of CORD-19 data
+                data = list(workflow([f'{filename}.csv']))
+                # print(data[:1])
+                self.embeddings.index(data)
+                self.embeddings.save(indexfile)
+                print("Indexing and Caching finished for the 1st time!")
 
-        # Partially call the prediction
-        fn = partial(self.predict, *args, **kwargs)
-        fn.__name__ = self.predict.__name__
-        gr.Interface(
-            fn=fn,      
-            inputs=self.inputs,
-            outputs=self.outputs,
-            examples=self.examples
-        ).launch(
-            server_name=self.host,
-            server_port=self.port,
-            enable_queue=self.enable_queue,
-            share=False,
-        )
+            # prompt = "hypertension"
+            # query = f'select {", ".join([column for column in self.columns])} from txtai where similar({prompt})'
+            # for result in self.embeddings.search(query):
+            #     print(json.dumps(result, default=str, indent=2))
+
+    def search_func(self, 
+                    prompttext, 
+                    pretrained="sentence-transformers/multi-qa-mpnet-base-dot-v1", 
+                    location="Kendall MIT",
+                    distance=200,
+                    limit=None):
+        assert pretrained in self.ckptlist
+        query = f'select {", ".join(["nct_id"] + [column for column in self.columns])} from txtai where similar({prompttext})'
+        results = self.embeddings.search(query, limit=35000)
+        # pprint(results)
+        filters = self.search_cond(results, location, distance)
+        return filters
+
+    def search_cond(self, 
+                    results, 
+                    location, 
+                    distance):
         
+        # Parse location into latitude and longitude using geopy
+        geolocator = Nominatim(user_agent="my-app")
+        location_obj = geolocator.geocode(location)
+        if location_obj is None:
+            raise ValueError(f"Could not find location: {location}")
+        location_coords = (location_obj.latitude, location_obj.longitude)
 
-class LitRootFlow(L.LightningFlow):
-    def __init__(self):
-        super().__init__()
-        self.trials_search = TrialsSearchServeGradio(parallel=True)
-        self.prompt_search = PromptSearchServeGradio(parallel=True)
+        # Filter results based on distance from the location
+        filtered_results = []
+        for result in results:
+            # Use the first location column available
+            location_col = next((col for col in result.keys() if col in [
+                                'city', 'state', 'zip', 'country']), None)
+            if location_col is None:
+                # No location column found, skip this result
+                continue
+            location_str = result[location_col]
+            location_obj = geolocator.geocode(location_str)
+            if location_obj is None:
+                # Could not parse location, skip this result
+                continue
+            result_coords = (location_obj.latitude, location_obj.longitude)
+            dist = geopy.distance.distance(location_coords, result_coords).km
+            if dist <= distance:
+                filtered_results.append(result)
 
-    def configure_layout(self):
-        tabs = []
-        tabs.append({"name": "Trials Search", "content": self.trials_search})
-        tabs.append({"name": "Prompt Search", "content": self.prompt_search})
-        return tabs
+        return filtered_results
+    
+    def launch_interface(self, *args, **kwargs):
+        interface = gr.Interface(
+            fn=lambda *args, **kwargs: self.search_func(*args, **kwargs),
+            inputs=[
+                gr.Textbox(label=f"Source prompt text"),
+                gr.Dropdown(self.ckptlist, label=f"Pretrained model"),
+                gr.Textbox(label=f"Location"),
+                gr.Slider(1, 2000, value=100,
+                          label=f"Within (kms)", step=10),
+            ],
+            outputs=[
+                gr.Json(label=f"Similar trials if found")
+            ],
+            examples=[
+                ["hypertension", "sentence-transformers/multi-qa-mpnet-base-dot-v1", "San Francisco", 500],
+                ["hypertension", "sentence-transformers/multi-qa-mpnet-base-dot-v1", "Cambridge", 500],
+                ["diabetes", "sentence-transformers/multi-qa-mpnet-base-dot-v1", "Miami", 500],
+                ["diabetes", "sentence-transformers/multi-qa-mpnet-base-dot-v1", "Boston", 500],
+            ],
+            title="Semantic Search on Clinical Trial Data",
+            description="Enter a prompt",
+        )
 
-    def run(self):
-        self.trials_search.run()
-        self.prompt_search.run()
+        interface.launch(*args, **kwargs)
 
-app = L.LightningApp(LitRootFlow())
-# app = L.LightningApp(TrialsSearchServeGradio())
+
+def main():
+    trial_search = SemanticSearch(
+        filename="ctgov_34983_20230417",
+        columns=[
+            "brief_title",
+            "official_title",
+            "brief_summaries",
+            "detailed_descriptions",
+            "criteria",
+            "city",
+            "state",
+            "zip",
+            "country",
+        ],
+        ckptlist=[
+            "sentence-transformers/multi-qa-mpnet-base-dot-v1",
+        ],
+        rerun=False,
+    )
+    trial_search.launch_interface(server_name="localhost")
+
+
+if __name__ == "__main__":
+    main()
