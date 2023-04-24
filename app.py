@@ -81,7 +81,7 @@ class SemanticSearch(object):
                     pretrained="sentence-transformers/multi-qa-mpnet-base-dot-v1", 
                     location="Kendall MIT",
                     distance=200,
-                    limit=None):
+                    limit=10):
         assert pretrained in self.ckptlist
         query = f'select {", ".join(["nct_id"] + [column for column in self.columns])} from txtai where similar({prompttext})'
         results = self.embeddings.search(query, limit=35000)
