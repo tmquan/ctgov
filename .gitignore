@@ -3,9 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-ctgov*
-cache/
-temp/
+# Related data folders
+csv*
+csv/*
+npy/*
+pdf/*
+
 # C extensions
 *.so
 
